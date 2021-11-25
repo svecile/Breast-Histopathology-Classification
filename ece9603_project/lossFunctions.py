@@ -3,7 +3,6 @@ import torch
 import torch.nn.functional as torch_func
 
 from torch import nn
-from ece9603_project.lovaszHinge import lovasz_hinge
 
 """
 A collection of interesting and useful loss functions for image classification
@@ -15,7 +14,10 @@ def sigmoidAndFlatten(predictions, targets):
     # Don't use this if model contains sigmoid style activation layer
     predictions = torch_func.sigmoid(predictions)
 
-    # Flatten target and predicted values
+    return flatten(predictions, targets)
+
+def flatten(predictions, targets):
+    # flatten target and predicted values
     predictions = predictions.view(-1)
     targets = targets.view(-1)
 
@@ -166,16 +168,6 @@ class FocalTverskyLoss(nn.Module):
         focalTversky = (1 - tversky) ** gamma
 
         return focalTversky
-
-# TODO: Get LovaszHingeLoss working
-class LovaszHingeLoss(nn.Module):
-    def __init__(self, weight=None, size_average=True):
-        super(LovaszHingeLoss, self).__init__()
-
-    def forward(self, predictions, targets):
-        inputs = torch_func.sigmoid(predictions)
-
-        return lovasz_hinge(predictions, targets, per_image=False)
 
 lossFunctionMap = {
     'bce_with_logits_loss': nn.BCEWithLogitsLoss(),
