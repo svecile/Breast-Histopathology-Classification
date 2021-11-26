@@ -31,6 +31,13 @@ def class_weights(df_classes):
 
     return dict(zip(labels, weights))
 
+def classWeightsTensor(targets_torch, class_weights):
+    targets_np = targets_torch.numpy()
+    mapping_func = np.vectorize(lambda x: class_weights[x])
+    weightsMap_np = mapping_func(targets_np)
+
+    return torch.from_numpy(weightsMap_np)
+
 
 class DiceLoss(nn.Module):
     """
@@ -45,13 +52,13 @@ class DiceLoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
         super(DiceLoss, self).__init__()
 
-    def forward(self, predictions, targets, smooth=1, class_weight=1):
+    def forward(self, predictions, targets, smooth=1, class_weights=1):
         predictions, targets = sigmoidAndFlatten(predictions, targets)
 
         intersection = (predictions * targets).sum()
         dice = (2.*intersection + smooth) / (predictions.sum() + targets.sum() + smooth)
 
-        return (1-dice) * class_weight
+        return 1-dice
 
 
 class BCEDiceLoss(nn.Module):
@@ -63,7 +70,7 @@ class BCEDiceLoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
         super(BCEDiceLoss, self).__init__()
 
-    def forward(self, predictions, targets, smooth=1, class_weight=1):
+    def forward(self, predictions, targets, smooth=1, class_weights=1):
         predictions, targets = sigmoidAndFlatten(predictions, targets)
 
         # Dice Loss Part
@@ -72,9 +79,11 @@ class BCEDiceLoss(nn.Module):
         dice_loss = 1 - dice
 
         # BCE Loss Part
-        bce_loss = torch_func.binary_cross_entropy(predictions, targets, reduction='mean')
+        bce_loss = torch_func.binary_cross_entropy(predictions, targets,
+                                                   reduction='mean',
+                                                   weight=class_weights)
 
-        return (dice_loss + bce_loss) * class_weight
+        return dice_loss + bce_loss
 
 
 class JaccardIoULoss(nn.Module):
@@ -84,7 +93,7 @@ class JaccardIoULoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
         super(JaccardIoULoss, self).__init__()
 
-    def forward(self, predictions, targets, smooth=1, class_weight=1):
+    def forward(self, predictions, targets, smooth=1, class_weights=1):
         predictions, targets = sigmoidAndFlatten(predictions, targets)
 
         # Intersection can be considered the same as True Positive count
@@ -95,7 +104,7 @@ class JaccardIoULoss(nn.Module):
 
         IntersectionOverUnion = (intersection + smooth) / (union + smooth)
 
-        return (1 - IntersectionOverUnion) * class_weight
+        return 1 - IntersectionOverUnion
 
 
 class FocalLoss(nn.Module):
@@ -115,14 +124,16 @@ class FocalLoss(nn.Module):
         super(FocalLoss, self).__init__()
 
     def forward(self, predictions, targets, alpha=0.8, gamma=2, smooth=1,
-                class_weight=1):
+                class_weights=None):
         predictions, targets = sigmoidAndFlatten(predictions, targets)
 
-        bce_loss = torch_func.binary_cross_entropy(predictions, targets, reduction='mean')
+        bce_loss = torch_func.binary_cross_entropy(predictions, targets,
+                                                   reduction='mean',
+                                                   weight=class_weights)
         bce_exp = torch.exp(-bce_loss)
         focal_loss = alpha * (1-bce_exp) ** gamma * bce_loss
 
-        return focal_loss * class_weight
+        return focal_loss
 
 
 class TverskyLoss(nn.Module):
@@ -141,7 +152,7 @@ class TverskyLoss(nn.Module):
         super(TverskyLoss, self).__init__()
 
     def forward(self, predictions, targets, smooth=1, alpha=0.5, beta=0.5,
-                class_weight=1):
+                class_weights=1):
         predictions, targets = sigmoidAndFlatten(predictions, targets)
 
         # Calculate amount of True Positives, False Positives and False Negatives
@@ -151,7 +162,8 @@ class TverskyLoss(nn.Module):
 
         tversky = (TP + smooth) / (TP + alpha*FP + beta*FN + smooth)
 
-        return (1 - tversky) * class_weight
+        return 1 - tversky
+
 
 class FocalTverskyLoss(nn.Module):
     """
@@ -167,7 +179,7 @@ class FocalTverskyLoss(nn.Module):
         super(FocalTverskyLoss, self).__init__()
 
     def forward(self, predictions, targets, smooth=1, alpha=0.5, beta=0.5, gamma=1,
-                class_weight=1):
+                class_weights=1):
         predictions, targets = sigmoidAndFlatten(predictions, targets)
 
         # Calculate amount of True Positives, False Positives and False Negatives
@@ -178,7 +190,7 @@ class FocalTverskyLoss(nn.Module):
         tversky = (TP + smooth) / (TP + alpha*FP + beta*FN + smooth)
         focalTversky = (1 - tversky) ** gamma
 
-        return focalTversky * class_weight
+        return focalTversky
 
 lossFunctionMap = {
     'bce_with_logits_loss': nn.BCEWithLogitsLoss(),
@@ -190,5 +202,5 @@ lossFunctionMap = {
     'focal_tversky_loss': FocalTverskyLoss()
 }
 
-def getLossFunction(name):
+def getLossFunction(name, class_weights=DEFAULT_WEIGHTS):
     return lossFunctionMap[name]
