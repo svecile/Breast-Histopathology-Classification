@@ -12,7 +12,7 @@ https://arxiv.org/pdf/2006.14822.pdf
 
 def sigmoidAndFlatten(predictions, targets):
     # Don't use this if model contains sigmoid style activation layer
-    predictions = torch_func.sigmoid(predictions)
+    predictions = torch.sigmoid(predictions)
 
     return flatten(predictions, targets)
 
